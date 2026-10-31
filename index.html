@@ -1,0 +1,475 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta name="theme-color" content="#2563eb">
+  <title>PDF Summarizer</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: #f8fafc;
+      color: #1e293b;
+      padding-bottom: 80px;
+    }
+    .header {
+      background: linear-gradient(135deg, #2563eb 0%, #1e40af 100%);
+      color: white;
+      padding: 20px 16px;
+      position: sticky;
+      top: 0;
+      z-index: 10;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    }
+    .header h1 { font-size: 22px; font-weight: 700; }
+    .container { padding: 16px; max-width: 600px; margin: 0 auto; }
+    .card {
+      background: white;
+      border-radius: 12px;
+      padding: 16px;
+      margin-bottom: 16px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    }
+    .card h2 { font-size: 18px; margin-bottom: 12px; color: #0f172a; }
+    label { display: block; font-size: 14px; font-weight: 600; margin-bottom: 6px; color: #334155; }
+    input, select, textarea {
+      width: 100%;
+      padding: 12px;
+      border: 2px solid #e2e8f0;
+      border-radius: 8px;
+      font-size: 16px;
+      margin-bottom: 12px;
+      font-family: inherit;
+    }
+    input:focus, select:focus, textarea:focus { outline: none; border-color: #2563eb; }
+    button {
+      width: 100%;
+      padding: 14px;
+      background: #2563eb;
+      color: white;
+      border: none;
+      border-radius: 8px;
+      font-size: 16px;
+      font-weight: 600;
+      cursor: pointer;
+      margin-top: 8px;
+    }
+    button:active { background: #1e40af; }
+    button:disabled { background: #94a3b8; cursor: not-allowed; }
+    .btn-secondary { background: #64748b; }
+    .btn-secondary:active { background: #475569; }
+    .file-input-wrapper {
+      border: 2px dashed #cbd5e1;
+      border-radius: 8px;
+      padding: 24px;
+      text-align: center;
+      margin-bottom: 12px;
+    }
+    .file-input-wrapper input[type="file"] { display: none; }
+    .file-name { font-size: 14px; color: #64748b; margin-top: 8px; }
+    .resumen-box {
+      background: #f1f5f9;
+      border-left: 4px solid #2563eb;
+      padding: 12px;
+      border-radius: 8px;
+      white-space: pre-wrap;
+      font-size: 15px;
+      line-height: 1.6;
+      margin-top: 12px;
+    }
+    .toast {
+      position: fixed;
+      bottom: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: #1e293b;
+      color: white;
+      padding: 12px 20px;
+      border-radius: 8px;
+      font-size: 14px;
+      z-index: 100;
+      animation: slideUp 0.3s ease;
+    }
+    @keyframes slideUp {
+      from { transform: translate(-50%, 100px); opacity: 0; }
+      to { transform: translate(-50%, 0); opacity: 1; }
+    }
+    .historial-item {
+      padding: 12px;
+      border-bottom: 1px solid #e2e8f0;
+      cursor: pointer;
+    }
+    .historial-item:last-child { border-bottom: none; }
+    .historial-item:active { background: #f8fafc; }
+    .historial-item strong { display: block; font-size: 15px; margin-bottom: 4px; }
+    .historial-item span { font-size: 13px; color: #64748b; }
+    .loading { text-align: center; padding: 20px; color: #64748b; }
+    .hidden { display: none; }
+  </style>
+<style id="lf-tema">html,body{background:#ffffff !important;color:#1a1a1a !important;font-family:-apple-system,'Segoe UI',Roboto,Arial,sans-serif !important;font-size:16px !important}</style></head>
+<body>
+  <div class="header">
+    <h1>📄 PDF Summarizer</h1>
+  </div>
+
+  <div class="container">
+    <!-- Config API -->
+    <div class="card">
+      <h2>API de Resumen</h2>
+      <label>Proveedor</label>
+      <select id="apiProvider">
+        <option value="gemini">Google Gemini</option>
+        <option value="openai">OpenAI GPT-4</option>
+        <option value="claude">Anthropic Claude</option>
+      </select>
+      
+      <label>API Key</label>
+      <input type="password" id="apiKey" placeholder="sk-...">
+      <small style="color: #64748b; font-size: 13px;">Tu key se guarda localmente en el dispositivo</small>
+      
+      <label>Longitud del Resumen</label>
+      <select id="longitud">
+        <option value="corto">Corto (2-3 párrafos)</option>
+        <option value="medio" selected>Medio (4-5 párrafos)</option>
+        <option value="largo">Largo (6+ párrafos)</option>
+      </select>
+      
+      <button onclick="guardarConfig()">Guardar Configuración</button>
+    </div>
+
+    <!-- Subir PDF -->
+    <div class="card">
+      <h2>Subir PDF</h2>
+      <div class="file-input-wrapper" onclick="document.getElementById('pdfInput').click()">
+        <div style="font-size: 40px;">📁</div>
+        <div style="margin-top: 8px; font-weight: 600;">Toca para seleccionar PDF</div>
+        <div class="file-name" id="fileName">Ningún archivo seleccionado</div>
+      </div>
+      <input type="file" id="pdfInput" accept=".pdf" onchange="handleFileSelect(event)">
+      
+      <label>Tipo de PDF</label>
+      <select id="tipoPdf">
+        <option value="texto">PDF con texto seleccionable</option>
+        <option value="imagen">PDF escaneado / fotos de libro</option>
+      </select>
+      
+      <button id="procesarBtn" onclick="procesarPDF()" disabled>Procesar y Resumir</button>
+    </div>
+
+    <!-- Resultado -->
+    <div class="card hidden" id="resultadoCard">
+      <h2>Resumen Generado</h2>
+      <div class="resumen-box" id="resumenTexto"></div>
+      <button onclick="copiarResumen()">📋 Copiar</button>
+      <button class="btn-secondary" onclick="compartirResumen()">📤 Compartir</button>
+    </div>
+
+    <!-- Historial -->
+    <div class="card">
+      <h2>Historial</h2>
+      <div id="historialLista">
+        <div class="loading">No hay resúmenes guardados</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- PDF.js -->
+  <script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js"></script>
+  <script>
+    pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js';
+  </script>
+  <!-- Tesseract.js para OCR -->
+  <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+
+  <script>
+    let archivoActual = null;
+    let textoExtraido = '';
+
+    // Cargar config al iniciar
+    window.addEventListener('DOMContentLoaded', cargarConfig);
+
+    async function cargarConfig() {
+      try {
+        let config;
+        if (window.Capacitor && window.Capacitor.isNativePlatform()) {
+          const { Preferences } = await import('@capacitor/preferences');
+          const { value } = await Preferences.get({ key: 'config' });
+          config = value ? JSON.parse(value) : null;
+        } else {
+          const stored = localStorage.getItem('config');
+          config = stored ? JSON.parse(stored) : null;
+        }
+        
+        if (config) {
+          document.getElementById('apiKey').value = config.apiKey || '';
+          document.getElementById('apiProvider').value = config.apiProvider || 'gemini';
+          document.getElementById('longitud').value = config.longitud || 'medio';
+        }
+        cargarHistorial();
+      } catch (e) {
+        console.log('No hay config guardada');
+      }
+    }
+
+    async function guardarConfig() {
+      const config = {
+        apiKey: document.getElementById('apiKey').value,
+        apiProvider: document.getElementById('apiProvider').value,
+        longitud: document.getElementById('longitud').value
+      };
+      
+      if (!config.apiKey) {
+        mostrarToast('Ingresá tu API Key');
+        return;
+      }
+      
+      try {
+        if (window.Capacitor && window.Capacitor.isNativePlatform()) {
+          const { Preferences } = await import('@capacitor/preferences');
+          await Preferences.set({ key: 'config', value: JSON.stringify(config) });
+        } else {
+          localStorage.setItem('config', JSON.stringify(config));
+        }
+        mostrarToast('✓ Configuración guardada');
+      } catch (error) {
+        mostrarToast('Error al guardar: ' + error.message);
+      }
+    }
+
+    function handleFileSelect(event) {
+      const file = event.target.files[0];
+      if (file && file.type === 'application/pdf') {
+        archivoActual = file;
+        document.getElementById('fileName').textContent = file.name;
+        document.getElementById('procesarBtn').disabled = false;
+      }
+    }
+
+    async function procesarPDF() {
+      if (!archivoActual) return;
+      
+      const config = await obtenerConfig();
+      if (!config?.apiKey) {
+        mostrarToast('Primero configurá tu API Key');
+        return;
+      }
+
+      const btn = document.getElementById('procesarBtn');
+      btn.disabled = true;
+      btn.textContent = 'Extrayendo texto...';
+      
+      try {
+        const tipo = document.getElementById('tipoPdf').value;
+        
+        if (tipo === 'texto') {
+          textoExtraido = await extraerTextoPDF(archivoActual);
+        } else {
+          btn.textContent = 'Procesando OCR...';
+          textoExtraido = await extraerTextoOCR(archivoActual);
+        }
+        
+        if (!textoExtraido || textoExtraido.length < 50) {
+          throw new Error('No se pudo extraer texto. Probá con modo OCR');
+        }
+        
+        btn.textContent = 'Generando resumen...';
+        const resumen = await generarResumen(textoExtraido, config);
+        
+        mostrarResultado(resumen);
+        await guardarEnHistorial(archivoActual.name, resumen);
+        btn.textContent = 'Procesar y Resumir';
+        btn.disabled = false;
+        
+      } catch (error) {
+        mostrarToast('Error: ' + error.message);
+        btn.textContent = 'Procesar y Resumir';
+        btn.disabled = false;
+      }
+    }
+
+    async function extraerTextoPDF(file) {
+      const arrayBuffer = await file.arrayBuffer();
+      const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+      let texto = '';
+      
+      for (let i = 1; i <= pdf.numPages; i++) {
+        const page = await pdf.getPage(i);
+        const content = await page.getTextContent();
+        texto += content.items.map(item => item.str).join(' ') + '\n\n';
+      }
+      return texto;
+    }
+
+    async function extraerTextoOCR(file) {
+      const arrayBuffer = await file.arrayBuffer();
+      const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+      let texto = '';
+      
+      for (let i = 1; i <= pdf.numPages; i++) {
+        const page = await pdf.getPage(i);
+        const viewport = page.getViewport({ scale: 2.0 });
+        const canvas = document.createElement('canvas');
+        const context = canvas.getContext('2d');
+        canvas.height = viewport.height;
+        canvas.width = viewport.width;
+        
+        await page.render({ canvasContext: context, viewport }).promise;
+        
+        const { data: { text } } = await Tesseract.recognize(canvas, 'spa');
+        texto += text + '\n\n';
+      }
+      return texto;
+    }
+
+    async function generarResumen(texto, config) {
+      const prompts = {
+        corto: 'Resume este texto en 2-3 párrafos concisos:',
+        medio: 'Resume este texto en 4-5 párrafos manteniendo los puntos clave:',
+        largo: 'Haz un resumen detallado en 6+ párrafos con todos los conceptos importantes:'
+      };
+      
+      const prompt = prompts[config.longitud] + '\n\n' + texto.substring(0, 12000);
+      
+      if (config.apiProvider === 'gemini') {
+        const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=${config.apiKey}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
+        });
+        const data = await res.json();
+        return data.candidates[0].content.parts[0].text;
+      }
+      
+      if (config.apiProvider === 'openai') {
+        const res = await fetch('https://api.openai.com/v1/chat/completions', {
+          method: 'POST',
+          headers: { 
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${config.apiKey}`
+          },
+          body: JSON.stringify({
+            model: 'gpt-4o-mini',
+            messages: [{ role: 'user', content: prompt }]
+          })
+        });
+        const data = await res.json();
+        return data.choices[0].message.content;
+      }
+      
+      if (config.apiProvider === 'claude') {
+        const res = await fetch('https://api.anthropic.com/v1/messages', {
+          method: 'POST',
+          headers: { 
+            'Content-Type': 'application/json',
+            'x-api-key': config.apiKey,
+            'anthropic-version': '2023-06-01'
+          },
+          body: JSON.stringify({
+            model: 'claude-3-haiku-20240307',
+            max_tokens: 2048,
+            messages: [{ role: 'user', content: prompt }]
+          })
+        });
+        const data = await res.json();
+        return data.content[0].text;
+      }
+    }
+
+    function mostrarResultado(resumen) {
+      document.getElementById('resumenTexto').textContent = resumen;
+      document.getElementById('resultadoCard').classList.remove('hidden');
+      window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
+    }
+
+    function copiarResumen() {
+      const texto = document.getElementById('resumenTexto').textContent;
+      navigator.clipboard.writeText(texto);
+      mostrarToast('✓ Copiado al portapapeles');
+    }
+
+    async function compartirResumen() {
+      const texto = document.getElementById('resumenTexto').textContent;
+      if (window.Capacitor && window.Capacitor.isNativePlatform()) {
+        const { Share } = await import('@capacitor/share');
+        await Share.share({ text: texto, title: 'Resumen PDF' });
+      } else {
+        navigator.clipboard.writeText(texto);
+        mostrarToast('Copiado para compartir');
+      }
+    }
+
+    async function obtenerConfig() {
+      try {
+        if (window.Capacitor && window.Capacitor.isNativePlatform()) {
+          const { Preferences } = await import('@capacitor/preferences');
+          const { value } = await Preferences.get({ key: 'config' });
+          return value ? JSON.parse(value) : null;
+        } else {
+          const stored = localStorage.getItem('config');
+          return stored ? JSON.parse(stored) : null;
+        }
+      } catch { return null; }
+    }
+
+    async function guardarEnHistorial(nombre, resumen) {
+      const item = { nombre, resumen, fecha: new Date().toISOString() };
+      let historial = await obtenerHistorial();
+      historial.unshift(item);
+      historial = historial.slice(0, 20); // Max 20 items
+      
+      if (window.Capacitor && window.Capacitor.isNativePlatform()) {
+        const { Preferences } = await import('@capacitor/preferences');
+        await Preferences.set({ key: 'historial', value: JSON.stringify(historial) });
+      } else {
+        localStorage.setItem('historial', JSON.stringify(historial));
+      }
+      cargarHistorial();
+    }
+
+    async function obtenerHistorial() {
+      try {
+        if (window.Capacitor && window.Capacitor.isNativePlatform()) {
+          const { Preferences } = await import('@capacitor/preferences');
+          const { value } = await Preferences.get({ key: 'historial' });
+          return value ? JSON.parse(value) : [];
+        } else {
+          const stored = localStorage.getItem('historial');
+          return stored ? JSON.parse(stored) : [];
+        }
+      } catch { return []; }
+    }
+
+    async function cargarHistorial() {
+      const historial = await obtenerHistorial();
+      const lista = document.getElementById('historialLista');
+      
+      if (historial.length === 0) {
+        lista.innerHTML = '<div class="loading">No hay resúmenes guardados</div>';
+        return;
+      }
+      
+      lista.innerHTML = historial.map(item => `
+        <div class="historial-item" onclick="verHistorial('${item.fecha}')">
+          <strong>${item.nombre}</strong>
+          <span>${new Date(item.fecha).toLocaleDateString('es-AR')} - ${item.resumen.substring(0, 60)}...</span>
+        </div>
+      `).join('');
+    }
+
+    async function verHistorial(fecha) {
+      const historial = await obtenerHistorial();
+      const item = historial.find(h => h.fecha === fecha);
+      if (item) mostrarResultado(item.resumen);
+    }
+
+    function mostrarToast(msg) {
+      const toast = document.createElement('div');
+      toast.className = 'toast';
+      toast.textContent = msg;
+      document.body.appendChild(toast);
+      setTimeout(() => toast.remove(), 3000);
+    }
+  </script>
+</body>
+</html>
